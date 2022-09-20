@@ -11,6 +11,10 @@ from PyQt5.QtWidgets import QMessageBox
 from qgis.utils import iface
 
 
+# Location of powershell executable on Windows.  %SystemRoot% is likely always C:\WINDOWS, but can never be too sure...
+_powershell_exe = os.getenv('SystemRoot') + r'\System32\WindowsPowerShell\v1.0\powershell.exe'
+
+
 class ExitTask(threading.Thread):
     """Background task to exit QGIS.
 
@@ -20,6 +24,20 @@ class ExitTask(threading.Thread):
         while True:
             iface.actionExit().trigger()
             time.sleep(0.5)
+
+
+def have_permission(osgeo4w_root):
+    """Check if we have writing permission for the OSGeo4W root directory by opening a test file."""
+    testfile = os.path.join(osgeo4w_root, 'inca_install_test.txt')
+    try:
+        with open(testfile, 'wt'):
+            pass
+    except BaseException:  # If we don't have permission this should raise 'PermissionError', but let's catch possible
+        # other exceptions as well.
+        return False
+    # If no exception was raised, we have to remove the file again:
+    os.remove(testfile)
+    return True
 
 
 def check_packages(packages):
@@ -48,12 +66,20 @@ def check_packages(packages):
                                           QMessageBox.Ok | QMessageBox.Cancel)
             if answer == QMessageBox.Ok:
                 # Run osgeo4w-setup and exit QGIS:
-                args = [f'{osgeo_root}\\bin\\osgeo4w-setup.exe', '--advanced', '--autoaccept']
+                osgeo4w_setup = f'{osgeo_root}\\bin\\osgeo4w-setup.exe'
+                args = ['--advanced', '--autoaccept', '--root', osgeo_root]
                 # add required packages to list of installer arguments:
                 for osgeo4w_pkg in packages.values():
                     args.append('--packages')
                     args.append(osgeo4w_pkg)
-                subprocess.Popen(args)
+                # Run command using PowerShell:
+                argumentlist = '@(' + ', '.join(f'\"{arg}\"' for arg in args) + ')'
+                # try running with elevated privileges if we don't have write permissions:
+                verb_opt = '-Verb RunAs ' if not have_permission(osgeo_root) else ''
+                subprocess.Popen([
+                    _powershell_exe, '-Command',
+                    f"& {{ Start-Process \"{osgeo4w_setup}\" -ArgumentList {argumentlist} {verb_opt}}}"
+                ])
                 # Exit QGIS in case setup needs to update files which are in use (e.g. the qgis executable, GDAL, ...)
                 ExitTask().start()
         return False
