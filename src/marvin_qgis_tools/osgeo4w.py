@@ -11,10 +11,6 @@ from PyQt5.QtWidgets import QMessageBox
 from qgis.utils import iface
 
 
-# Location of powershell executable on Windows.  %SystemRoot% is likely always C:\WINDOWS, but can never be too sure...
-_powershell_exe = os.getenv('SystemRoot') + r'\System32\WindowsPowerShell\v1.0\powershell.exe'
-
-
 class ExitTask(threading.Thread):
     """Background task to exit QGIS.
 
@@ -74,10 +70,12 @@ def check_packages(packages):
                     args.append(osgeo4w_pkg)
                 # Run command using PowerShell:
                 argumentlist = '@(' + ', '.join(f'\"{arg}\"' for arg in args) + ')'
+                # Location of powershell executable.  %SystemRoot% is likely C:\WINDOWS, but can never be too sure...
+                powershell_exe = os.getenv('SystemRoot') + r'\System32\WindowsPowerShell\v1.0\powershell.exe'
                 # try running with elevated privileges if we don't have write permissions:
                 verb_opt = '-Verb RunAs ' if not have_permission(osgeo_root) else ''
                 subprocess.Popen([
-                    _powershell_exe, '-Command',
+                    powershell_exe, '-Command',
                     f"& {{ Start-Process \"{osgeo4w_setup}\" -ArgumentList {argumentlist} {verb_opt}}}"
                 ])
                 # Exit QGIS in case setup needs to update files which are in use (e.g. the qgis executable, GDAL, ...)
