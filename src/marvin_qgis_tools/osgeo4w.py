@@ -8,6 +8,7 @@ import os
 import time
 
 from PyQt5.QtWidgets import QMessageBox
+from qgis.core import Qgis, QgsMessageLog
 from qgis.utils import iface
 
 
@@ -40,44 +41,45 @@ def check_packages(packages):
     """Check if required packages are available, otherwise run osgeo4w-setup to install them, and exit QGIS.
 
     :param packages: dictionary of {python_package: osgeo4w_package}, e.g. {'rasterio': 'python3-rasterio'}
-    :return: True if all required packages are available.
+    :return: False if we are on OSGeo4W but all required packages are not installed (yet).
     """
+    osgeo_root = os.getenv('OSGEO4W_ROOT')
+    if osgeo_root is None:
+        # We are on linux, mac, or (less likely) a non-OSGeo4W QGIS version for windows -> abort and try to install
+        # using pip
+        return True
+
     try:
         for python_package in packages:
             importlib.import_module(python_package)
         # If all imports succeed: return True
         return True
-    except ModuleNotFoundError:
-        osgeo_root = os.getenv('OSGEO4W_ROOT')
-        if osgeo_root is None:
-            # We are on linux, mac, or a non-OSGeo4W QGIS version (unlikely): user should take care of dependencies.
-            QMessageBox.warning(None, 'Plugin Installation',
-                                'Some dependencies are not available.  Please make sure the QGIS python '
-                                'environment has access to the following packages: ' +
-                                ', '.join(packages))
-        else:  # We are on OSGeo4W -> run the installer
-            answer = QMessageBox.question(None, 'Plugin Installation',
-                                          'We need to install a few extra packages.  Click OK to start the OSGeo4W '
-                                          'installer and exit QGIS.  Click Cancel to abort the plugin installation.',
-                                          QMessageBox.Ok | QMessageBox.Cancel)
-            if answer == QMessageBox.Ok:
-                # Run osgeo4w-setup and exit QGIS:
-                osgeo4w_setup = f'{osgeo_root}\\bin\\osgeo4w-setup.exe'
-                args = ['--advanced', '--autoaccept', '--root', osgeo_root]
-                # add required packages to list of installer arguments:
-                for osgeo4w_pkg in packages.values():
-                    args.append('--packages')
-                    args.append(osgeo4w_pkg)
-                # Run command using PowerShell:
-                argumentlist = '@(' + ', '.join(f'\"{arg}\"' for arg in args) + ')'
-                # Location of powershell executable.  %SystemRoot% is likely C:\WINDOWS, but can never be too sure...
-                powershell_exe = os.getenv('SystemRoot') + r'\System32\WindowsPowerShell\v1.0\powershell.exe'
-                # try running with elevated privileges if we don't have write permissions:
-                verb_opt = '-Verb RunAs ' if not have_permission(osgeo_root) else ''
-                subprocess.Popen([
-                    powershell_exe, '-Command',
-                    f"& {{ Start-Process \"{osgeo4w_setup}\" -ArgumentList {argumentlist} {verb_opt}}}"
-                ])
-                # Exit QGIS in case setup needs to update files which are in use (e.g. the qgis executable, GDAL, ...)
-                ExitTask().start()
-        return False
+    except ModuleNotFoundError as e:
+        QgsMessageLog.logMessage(f'Missing package {e}, need to run OSGeo4W setup.', level=Qgis.Info)
+
+    # We are on OSGeo4W -> ask to run the installer
+    answer = QMessageBox.question(None, 'Plugin Installation',
+                                  'We need to install a few extra packages.  Click OK to start the OSGeo4W '
+                                  'installer and exit QGIS.  Click Cancel to abort the plugin installation.',
+                                  QMessageBox.Ok | QMessageBox.Cancel)
+    if answer == QMessageBox.Ok:
+        # Run osgeo4w-setup and exit QGIS:
+        osgeo4w_setup = f'{osgeo_root}\\bin\\osgeo4w-setup.exe'
+        args = ['--advanced', '--autoaccept', '--root', osgeo_root]
+        # add required packages to list of installer arguments:
+        for osgeo4w_pkg in packages.values():
+            args.append('--packages')
+            args.append(osgeo4w_pkg)
+        # Run command using PowerShell:
+        argumentlist = '@(' + ', '.join(f'\"{arg}\"' for arg in args) + ')'
+        # Location of powershell executable.  %SystemRoot% is likely C:\WINDOWS, but can never be too sure...
+        powershell_exe = os.getenv('SystemRoot') + r'\System32\WindowsPowerShell\v1.0\powershell.exe'
+        # try running with elevated privileges if we don't have write permissions:
+        verb_opt = '-Verb RunAs ' if not have_permission(osgeo_root) else ''
+        subprocess.Popen([
+            powershell_exe, '-Command',
+            f"& {{ Start-Process \"{osgeo4w_setup}\" -ArgumentList {argumentlist} {verb_opt}}}"
+        ])
+        # Exit QGIS in case setup needs to update files which are in use (e.g. the qgis executable, GDAL, ...)
+        ExitTask(daemon=True).start()
+    return False
