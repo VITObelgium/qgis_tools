@@ -1,4 +1,4 @@
-# QGS Tools
+# QGIS Tools
 
 Scripts and Python modules for QGIS plugin development.
 
