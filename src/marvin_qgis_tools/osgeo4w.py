@@ -56,6 +56,8 @@ def check_packages(packages):
         return True
     except ModuleNotFoundError as e:
         QgsMessageLog.logMessage(f'Missing package {e}, need to run OSGeo4W setup.', level=Qgis.Info)
+    except Exception as e:
+        QgsMessageLog.logMessage(f'Exception when importing package: {e}, try to run OSGeo4W setup.', level=Qgis.Info)
 
     # We are on OSGeo4W -> ask to run the installer
     answer = QMessageBox.question(None, 'Plugin Installation',
