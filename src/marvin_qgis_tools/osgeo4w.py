@@ -25,7 +25,7 @@ class ExitTask(threading.Thread):
 
 def have_permission(osgeo4w_root):
     """Check if we have writing permission for the OSGeo4W root directory by opening a test file."""
-    testfile = os.path.join(osgeo4w_root, 'inca_install_test.txt')
+    testfile = os.path.join(osgeo4w_root, 'marvin_qgis_tools_install_test.txt')
     try:
         with open(testfile, 'wt'):
             pass
